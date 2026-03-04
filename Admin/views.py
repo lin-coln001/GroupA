@@ -3,8 +3,9 @@ from django.contrib.auth import login, authenticate, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.shortcuts import render, redirect, get_object_or_404
+from django_daraja.mpesa.core import MpesaClient
 
-from Admin.models import Student
+from Admin.models import Student, Payment
 from datetime import datetime
 
 
@@ -100,3 +101,31 @@ def logout_view(request):
     logout(request)
     return redirect('log_in')
 
+def payment(request,id):
+    student = get_object_or_404(Student, id=id)
+    if request.method == 'POST':
+        phone = request.POST.get('phone')
+        amount = request.POST.get('amount')
+        if not phone or not amount:
+            messages.error(request,
+                       'All fields are required')
+            return render(request, 'payment.html',
+                  {'student':student})
+        try:
+            client = MpesaClient()
+            response= client.stk_push(
+                phone,int(amount),'eMobilis                                                                                        ',
+                'payment for fee'
+                'https://example.com/callback'
+            ).json()
+            Payment.objects.create(
+                user=request.user,
+                phone=phone,
+                amount=amount,
+                checkout_request_id=response.get('checkout_request_id'),
+                status= 'pending')
+            messages.success(request,
+                         'STK PUSH SENT!Check your phone')
+        except Exception:
+            messages.error(request,'Payment failed')
+    return render(request, 'payment.html')
